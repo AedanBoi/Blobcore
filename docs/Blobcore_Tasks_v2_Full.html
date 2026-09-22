@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Blobcore Tasks v2</title>
+<style>
+:root{--bg:#121212;--card:#1e1e1e;--border:#2d2d2d;--text:#fff;--muted:#aaa;--accent:#4f8cff}
+*{box-sizing:border-box} body{margin:0;background:var(--bg);color:var(--text);font-family:Segoe UI,sans-serif;padding:16px}
+.container{max-width:900px;margin:auto}.top{display:flex;justify-content:space-between;align-items:center;position:relative}
+.boardBtn,.addBtn{border:0;border-radius:10px}.boardBtn{background:none;color:#fff;font-size:28px;font-weight:700;cursor:pointer}.addBtn{background:var(--accent);color:#fff;padding:10px 14px;cursor:pointer}
+.dropdown{position:absolute;top:50px;left:0;width:260px;background:var(--card);border:1px solid var(--border);border-radius:12px;overflow:hidden}
+.hidden{display:none !important}.item{padding:12px;cursor:pointer}.item:hover{background:#2b2b2b}.create{color:var(--accent);font-weight:700}
+.sectionHead{margin-top:18px;background:var(--card);padding:14px;border-radius:12px;cursor:pointer;font-weight:700}
+.task{display:flex;gap:12px;background:var(--card);border:1px solid var(--border);padding:14px;border-radius:12px;margin-top:10px}
+.check{width:24px;height:24px;border:2px solid var(--accent);border-radius:50%;cursor:pointer}.done{background:var(--accent)}
+.title{font-weight:700;font-size:18px}.meta{color:var(--muted);font-size:13px;margin-top:4px}.desc{margin-top:8px}.collapsed{display:none}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.85);display:none;justify-content:center;align-items:center}.modal.show{display:flex}
+.box{background:var(--card);padding:20px;border-radius:12px;width:340px}.box input,.box textarea,.box select{width:100%;margin:6px 0;padding:10px;background:#2b2b2b;color:white;border:0;border-radius:8px}
+.row{display:flex;gap:8px}.row button{flex:1;padding:10px;border:0;border-radius:8px}.primary{background:var(--accent);color:white}
+.p1{color:#aaa}.p2{color:#66a3ff}.p3{color:#57d657}.p4{color:#ffbf47}.p5{color:#ff6868}
+</style></head><body>
+<div class="container">
+<div class="top"><button id="boardBtn" class="boardBtn">▼ Loading...</button><button id="addBtn" class="addBtn">+ Task</button><div id="dropdown" class="dropdown hidden"></div></div>
+<div class="sectionHead" onclick="toggleSection('active','aArrow')"><span id="aArrow">▼</span> Uncompleted (<span id="activeCount">0</span>)</div><div id="active"></div>
+<div class="sectionHead" onclick="toggleSection('completed','cArrow')"><span id="cArrow">▶</span> Completed (<span id="completedCount">0</span>)</div><div id="completed" class="collapsed"></div>
+</div>
+<div id="taskModal" class="modal"><div class="box"><h3>New Task</h3><input id="taskName" placeholder="Task Name *"><textarea id="taskDesc" placeholder="Description"></textarea><input type="datetime-local" id="taskDue"><select id="taskPriority"><option>5</option><option>4</option><option selected>3</option><option>2</option><option>1</option></select><div class="row"><button class="primary" id="saveTask">Create</button><button onclick="taskModal.classList.remove('show')">Cancel</button></div></div></div>
+<div id="boardModal" class="modal"><div class="box"><h3>New Board</h3><input id="boardName" placeholder="Board Name"><div class="row"><button class="primary" id="saveBoard">Create</button><button onclick="boardModal.classList.remove('show')">Cancel</button></div></div></div>
+<script type="module">
+import {initializeApp} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import {getFirestore,collection,addDoc,onSnapshot,query,where,updateDoc,doc} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+const firebaseConfig={apiKey:'AIzaSyDk6QPtM_sB3HoH4G23DpYs5tslIQieA8U',authDomain:'blobcore-tasks.firebaseapp.com',projectId:'blobcore-tasks',storageBucket:'blobcore-tasks.firebasestorage.app',messagingSenderId:'391357961584',appId:'1:391357961584:web:c799e85f9d67c9b02f2bb5'};
+const db=getFirestore(initializeApp(firebaseConfig));
+let selectedBoard=''; let unsubscribe=null; let tasks=[];
+const boardBtn=document.getElementById('boardBtn'), dropdown=document.getElementById('dropdown');
+boardBtn.onclick=()=>dropdown.classList.toggle('hidden');
+document.addEventListener('click',e=>{if(!boardBtn.contains(e.target)&&!dropdown.contains(e.target)) dropdown.classList.add('hidden')});
+addBtn.onclick=()=>taskModal.classList.add('show');
+onSnapshot(collection(db,'boards'),snap=>{dropdown.innerHTML=''; const boards=[]; snap.forEach(d=>boards.push({id:d.id,...d.data()})); boards.forEach(b=>{const el=document.createElement('div'); el.className='item'; el.textContent=b.name||'Unnamed Board'; el.onclick=()=>{selectedBoard=b.id;boardBtn.textContent='▼ '+(b.name||'Unnamed Board'); dropdown.classList.add('hidden'); loadTasks();}; dropdown.appendChild(el);}); const c=document.createElement('div'); c.className='item create'; c.textContent='+ Create New Board'; c.onclick=()=>boardModal.classList.add('show'); dropdown.appendChild(c); if(boards.length&&!selectedBoard){selectedBoard=boards[0].id; boardBtn.textContent='▼ '+boards[0].name; loadTasks();}});
+saveBoard.onclick=async()=>{const n=boardName.value.trim(); if(!n)return; await addDoc(collection(db,'boards'),{name:n,createdAt:new Date().toISOString()}); boardName.value=''; boardModal.classList.remove('show');};
+saveTask.onclick=async()=>{const t=taskName.value.trim(); if(!t)return alert('Task name required'); await addDoc(collection(db,'tasks'),{title:t,description:taskDesc.value,dueDate:taskDue.value||'',priority:Number(taskPriority.value),completed:false,boardId:selectedBoard,createdAt:new Date().toISOString()}); taskName.value='';taskDesc.value='';taskDue.value='';taskModal.classList.remove('show');};
+function loadTasks(){ if(unsubscribe) unsubscribe(); unsubscribe=onSnapshot(query(collection(db,'tasks'),where('boardId','==',selectedBoard)),snap=>{tasks=[]; snap.forEach(d=>tasks.push({id:d.id,...d.data()})); render();});}
+function fmt(v){if(!v)return 'None'; return new Date(v).toLocaleString();}
+function render(){const a=tasks.filter(x=>!x.completed).sort((m,n)=>n.priority-m.priority); const c=tasks.filter(x=>x.completed); activeCount.textContent=a.length; completedCount.textContent=c.length; draw(a,active); draw(c,completed);}
+function draw(arr,target){target.innerHTML=''; if(!arr.length){target.innerHTML='<div class="meta" style="padding:10px">No tasks</div>';return;} arr.forEach(task=>{const name=task.title||task.name||'Untitled Task'; target.innerHTML+=`<div class="task"><div class="check ${task.completed?'done':''}" onclick="toggleTask('${task.id}',${task.completed})"></div><div><div class="title">${name}</div><div class="meta">Due: ${fmt(task.dueDate)}</div><div class="desc">${task.description||''}</div><div class="meta p${task.priority}">Priority ${task.priority}</div></div></div>`;});}
+window.toggleTask=async(id,current)=>{await updateDoc(doc(db,'tasks',id),{completed:!current});};
+window.toggleSection=(id,a)=>{document.getElementById(id).classList.toggle('collapsed'); document.getElementById(a).textContent=document.getElementById(id).classList.contains('collapsed')?'▶':'▼';};
+</script></body></html>
